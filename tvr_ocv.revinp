@@ -1,0 +1,128 @@
+c ************************************************************************************************************
+c
+c									TVR / OCV CALCULATION
+c
+c ************************************************************************************************************ 
+
+mp omp * *
+
+c Inputs
+text fname = 'stack2d_array32'				/* enter history file name (without extention)
+symb radius = 1. 						/* TVR distance
+symb fbeg = 500e3					/* beginning plotting frequency
+symb fend = 2e6					/* ending plotting frequency
+
+c Read time history
+read f1 '$fname.flxhst'           /* read in time history
+ 
+grph type standard				/* use old graphics to plot using the frequecy range
+
+c *************************************************************************************************************
+c
+c								EXTRAPOLATION
+c
+c *************************************************************************************************************
+
+extr
+      data '$fname.flxext'      /* read in extrapolation data
+      file f2 cler 		        /* name output file
+      spot 0. $radius 0.
+      calc 1                    /* calculate 
+      end
+
+c ************************************************************************************************************
+c
+c								MANIPULATE DATA - TIME TO FREQUENCY
+c
+c ************************************************************************************************************
+
+freq
+     file f3
+     time pad 5
+     fft f2 1               /* fft of extrapolated pressure
+     fft f1 2               /* fft of input voltage
+	 impd f1 3 f1 4			/* impedance
+     end
+
+
+c ************************************************************************************************************
+c
+c									CALCULATE TVR
+c
+c ************************************************************************************************************
+
+make
+      file f4
+      curv { f3 1 } / { f3 3 }                  /* normalise pressure response
+      curv ( 20. * alog10 ( { f4 1 } / 1.e-6 ) ) + ( 20. * alog10 ( ( $radius ) ) )       /* convert to TVR
+	  curv 20. * alog10 ( { f3 5 } ) + { f4 2 }			/* TCR
+	  curv { f4 3 } - 354. - 20. * alog10 ( { freq } / 1.e3 )
+      end
+c 	 file f4
+c       curv { f3 1 } / { f3 3 }                  /* normalise pressure response
+c       curv 20. * alog10 ( { f4 1 } / 1.e-6 )    /* convert to TVR
+c       end
+
+make
+      file f3
+      curv 20. * alog10 ( { f3 5 } )    /* convert to dB
+      end
+c ************************************************************************************************************
+c
+c									PLOT
+c
+c ************************************************************************************************************
+
+c Plot impedance
+grph
+     nvew 1
+     ttl 1
+Electrical Impedance
+     pset sttl 1 'Impedance Magnitude'
+     pset ylab 'Impedance (Ohms)'
+     plot f3 5
+	 writ onex 'imp.txt'
+     set wndo $fbeg $fend
+	 set log y on
+	 imag
+     end
+
+term
+
+c Plot TVR
+grph
+     nvew 1
+     ttl 1
+TVR
+     pset sttl 1 'TVR from Extrapolation'
+     pset ylab 'TVR dB re uPa/V at 1m'
+     plot f4 2
+     set wndo $fbeg $fend
+	 set log x on
+	 imag
+     end
+
+term
+
+c Plot OVC
+grph
+     nvew 1
+     ttl 1
+OCV
+     pset sttl 1 'OCV from Extrapolation'
+     pset ylab 'OCV dB re V/uPa at 1m'
+     plot f4 4
+     set wndo $fbeg $fend
+	 set log x on
+	 imag
+     end
+
+term
+
+c Write to file
+grph
+	plot f3 5 f4 2 f4 4
+	writ onex 'tvr_ovc.txt'
+	end
+
+stop

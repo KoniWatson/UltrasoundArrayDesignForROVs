@@ -1,0 +1,378 @@
+titl stack2d 3 Layer Piezoelectric Stack in 2D
+
+c
+c Example of 3 layer stacked PZT transducer in 2D.
+c Three identical pieces of PZT5H ceramic are bonded together
+c with the poling in the alternating directions. Ground electrode is along 
+c the base of layer 1 and between layers 2 and 3 . Active electrode is at
+c the top of layer 3 and between layers 1 and 2. The bondline is assumed
+c to be negligible in thickness and effect. 
+c They are connected to an ideal voltage source by a
+c resistor of value sufficient to enable a rapid return to steady state
+c ,a damping resistor. The device uses symmetry about 1 axis
+c Is physically symmetrical about a 2nd axis if layers 1 and 3 of identical thickness
+c compare to flxinp.stack3d
+c
+
+symb #get { labl } jobname        /* label name for job
+
+c
+c Device physical sizes
+c
+symb devlngth = 20.e-3    /* device length
+symb devdpth = 20.e-3     /* device depth
+symb pz1thck = .515e-3      /* ceramic1 thickness
+symb pz2thck = .515e-3      /* ceramic2 thickness
+symb pz3thck = .515e-3      /* ceramic3 thickness
+symb rtvthck = 2.5e-3		/* rtv thickness
+symb watthck = 30e-3		/* water thickness
+
+c
+c Meshing calcs
+c
+symb freqint = 700e3      /* frequency of interest
+symb wavevel = 1500      /* minimum wave velocity
+symb numelem = 30        /* number of elements per wavelength
+symb wavelength = $wavevel / $freqint
+symb szpitch = $wavelength / 2
+symb szelem = $szpitch * 0.9 
+symb nelem = 16
+symb xb1 = 0 /* start position of the first electrode
+symb xe1 = $xb1 + $szelem /* end position of the 1st electrode
+symb devlngth = $nelem * $szpitch * 1.2
+c
+c Resonant frequencies - known from earlier calculations
+c
+symb freqshp1 = 145.e3    /* frequency for displacement shape 1
+symb freqshp2 = 358.e3    /* frequency for displacement shape 2
+symb freqshp3 = 690.e3    /* frequency for displacement shape 3
+
+symb neltkpz1 = 4    /* min. number of elements through pzt 1 thickness
+symb neltkpz2 = 4    /* min. number of elements through pzt 2 thickness
+symb neltkpz3 = 4    /* min. number of elements through pzt 3 thickness
+symb ratlat = 0.5     /* ratio of lateral element size to thickness
+
+
+symb wavemin = $wavevel / $freqint   /* minimum wavelength
+symb box = $wavemin / $numelem       /* minimum element size
+symb box2 = $box * $ratlat           /* minimum lateral element size
+                                     /* shear waves slower so wavelength 
+                                     /* smaller, hence smaller elements
+symb freqdamp = $freqint             /* set damping frequency
+
+c
+c Allow 75 cycles at main freq. to ring down
+c
+symb simtime = 75. * ( 1. / $freqint )    /* simulation run time
+                                          /* - 75 cycle at freq of interest
+c
+c Physical sizes at important points
+c
+symb x1 = 0.0                /* start position of device length 
+                             /* (centre and use symmetry)
+symb x2 = $x1 + $devlngth    /* end position of device length
+symb x3 = $x2 + $watthck
+
+symb y1 = 0.0                /* base of model
+symb y2 = $y1 + $pz1thck     /* top of ceramic 1
+symb y3 = $y2 + $pz2thck     /* top of ceramic 2
+symb y4 = $y3 + $pz3thck     /* top of ceramic 3
+symb y5 = $y4 + $rtvthck		/* rtv layer
+symb y6 = $y5 + $watthck		/* water layer
+
+
+c
+c i,j,k indices
+c
+symb i1 = 1
+symb i2 = $i1 + nint ( ( $x2 - $x1 ) / $box2 )
+symb i3 = $i2 + nint ( ( $x3 - $x2 ) / $box2 )
+symb indgrd = $i3
+
+symb j1 = 1
+symb j2 = $j1 + max ( $neltkpz1 , nint ( ( $y2 - $y1 ) / $box ) )
+symb j3 = $j2 + max ( $neltkpz2 , nint ( ( $y3 - $y2 ) / $box ) )
+
+symb j4 = $j3 + max ( $neltkpz3 , nint ( ( $y4 - $y3 ) / $box ) )
+symb j5 = $j4 + ( nint ( ( $y5 - $y4 ) / $box ) )
+symb j6 = $j5 + ( nint ( ( $y6 - $y5 ) / $box ) )
+symb jndgrd = $j6
+
+c
+c Create grid
+c
+grid $indgrd $jndgrd
+
+c
+c Match geometry to grid index
+c
+geom
+      xcrd $x1 $x2 $i1 $i2
+      xcrd $x2 $x3 $i2 $i3
+      ycrd $y1 $y2 $j1 $j2
+      ycrd $y2 $y3 $j2 $j3
+      ycrd $y3 $y4 $j3 $j4
+      ycrd $y4 $y5 $j4 $j5
+      ycrd $y5 $y6 $j5 $j6
+      end
+
+c
+c Read in material properties
+c
+symb #read pvdf2.prjmat
+
+c
+c Assign mat. props to grid
+c
+site
+     regn void 
+     regn pvdf $i1 $i2 $j1 $j2
+     regn pvdfn $i1 $i2 $j2 $j3
+     regn pvdf $i1 $i2 $j3 $j4
+	 regn rtv $i1 $i2+5 $j4 $j5
+	 regn watr $i1 $i3 $j5 $j6
+	 regn watr $i2+5 $indgrd $j1 $j5
+     end
+
+c
+c Input function - single cycle sinusoid at freq. of interest
+c has frequency content up to 2. * freq. of interest
+c
+func sine $freqint 1. 0. 1. 
+
+c
+c Calculate value of resistor to use for rapid ringdown
+c
+symb perm = 0.1505e-7                     /* set permittivity, veries with material
+symb C = ( $perm * $devdpth * $devlngth ) / $pz1thck
+symb pi = 3.14159
+symb vrest = 50. /* 1. / ( 2. * $pi * $freqint * $C )
+c
+c create resistor only circuit
+c
+circ
+     defn rdm1
+     elem rest sers $vrest
+     end
+c
+c Piezoelectric section
+c Scale electrodes here due to connected circuit
+c otherwise scaling could be performed in review post processing
+c
+symb areascale = 2. * $devdpth     /* 1 symmetry plane plus depth
+                                   /* for electrode area scaling
+						   
+								   
+piez
+     wndo $i1 $i2 $j1 $j4   /* specify electric window
+	 
+do loop I 1 $nelem 1 /* loop over the number of elements
+symb #get { ib$I } clsnode $xb1
+symb #get { ie$I } clsnode $xe1
+
+     defn pos$I $areascale        /* Live Elect 1 
+     node $ib$I $ie$I $j2 $j2   /* Same potential top and bottom -  this is top
+     node $ib$I $ie$I $j4 $j4   /* this is botto
+
+symb xb1 = $xb1 + $szpitch
+symb xe1 = $xe1 +  $szpitch
+end$ loop
+c
+     defn neg1 $areascale     /* ground Elect 2
+     node $i1 $i2 $j1 $j1 
+     node $i1 $i2 $j3 $j3
+c
+c     conn pos1 rdm1 volt func     /* connect via resistor to perfect V source
+     bc pos1 volt func           /* drive electrode directly - use instead
+                                  /* of 'conn' subcommand to see effect 
+                                  /* damping resistor has :-
+                                  /* faster return to steady-state
+     bc neg1 grnd                 /* connect other electrode to ground
+     calc elec                    /* calculate electric fields (not required)
+                                  /* only used here for plotting purposes
+     end
+c
+c Calculate additonal properties
+c
+calc
+     pres
+     disp
+     end
+
+c
+c Boundary conditions
+c 1 symmetry plane in x direction
+c
+boun
+     side 1 symm
+	 side 2 absr
+	 side 4 absr
+     end
+c
+c Calculate displacement (mode) shape at freq. of interest
+c may need to run once and perform FFT on displacement to 
+c determine accurately, then run again to obtain shapes
+c
+
+
+shap
+     freq $freqshp1
+     freq $freqshp2
+     freq $freqshp3
+     end
+
+c c
+c Number of array elements
+c c
+c symb ncopyi = 8 
+c 
+c c
+c Array Grid
+c c
+c symb #keycord x 1 0. $si_width $pmem_wdth $top_elec_cent $top_elec_cent $pmem_wdth $si_width
+c if ($ncopyi gt 1) then 
+c 	symb #keycopy x 1 7 $ncopyi
+c endif
+c symb #get ( idx ) rootmax x
+c 
+c c
+c Array Site
+c c
+c if ( $ncopyi gt 1 ) then 
+c 	regndupl $i1 $i3 $j1 $j$jdx i $ncopyi
+c endif
+
+c Define extrapolation boundaries
+c Try to completely enclose the source
+c boundary should be close to the source to
+c reduce size, but at least 5-10 elements away
+c will result in flxext file being saved
+c
+extr
+      ref in $x1 $y1 0                /* set internal reference point for pressure gradient calculation
+      defn kirc                       /* kirchoff extrapolation 
+c	  defn four
+      node $i1 $i2+10 $j5+10 $j5+10   /* define node surface
+      node $i2+10 $i2+10 $j1 $j5+10   /* completely enclose device
+      end
+
+c
+c Process model
+c
+prcs
+
+
+c
+c Choose output time histories
+c Input function, voltage and charge on electrode (active) and 
+c displacement at top centre of device
+c
+pout
+     hist func                       /* Time history 1 - Excitation Signal
+     hist pize 1 2 1 1 1 1           /* Time histories 2 and 3 - Voltage and Charge on Electrode 1  
+     hist ydsp $i1 $i1 1 $j4 $j4 1   /* Time history 4 - Y-direction displacement on node at $i1, $j4
+	 hist pres
+     end
+
+c
+c Get model timestep and calculate number of steps required to
+c reach the desired simulation time. Then divide evenly by 'nloops'
+c for multiple plots of results during simulation
+c
+symb #get { step } timestep               /* get timestep
+symb nexec = nint ( $simtime / $step )    /* calc no. of steps required
+symb nloops = 40                          /* number of plotting loops
+symb nexec2 = nint ( $nexec / $nloops )   /* number of steps per loop
+
+c
+c Create plotting procedure (macro
+c
+proc plot save
+exec $nexec2                             /* execute model for nexec2 timesteps
+
+c
+c Plot output in 4 windows
+c materials                  -top left
+c voltage elec 1             -top right
+c Electric field y-direction -bottom left
+c Displacement at top        -bottom right
+c
+grph
+     nvew 4 
+     swap off
+     mirr x
+     colr tabl data 6        /* choose 120 colour table for data plots
+     ttl 1                   /* title
+3D, 3 Layer Piezoelectric Stack Model
+     view 1
+     plot matr                /* plot materials
+     view 2
+     plot 2                   /* plot voltage time history (2) on electrode 1
+                              /* may also be entered as 'plot flxhst 2'
+     view 3
+     plot ey                  /* plot electric fields in y-dir
+     view 4
+     plot 3                   /* plot displacement (4) time history
+                              /* may also be entered as 'plot flxhst 4'
+     end
+end$ proc
+
+proc plot $nloops              /* run procedure nloops times
+
+term
+
+symb ifrqint = nint ( $freqint ) /* create ineger definition of freq. of interest
+symb #save symb.$labl          /* save variable data
+
+c
+c Plot displacement shape at freq. of interest
+c Note that the 'shape1j' tool provides functionality
+c to simplify plotting of shapes
+c
+
+symb ifrqshp1 = nint ( $freqshp1 / 1000. )
+symb ifrqshp2 = nint ( $freqshp2 / 1000. )
+symb ifrqshp3 = nint ( $freqshp3 / 1000. )
+
+grph
+     nvew 2 
+     mirr x
+     ttl 1
+Displacement Shapes at $ifrqshp1 kHz
+     plot shap 1 0            /* plot requested shape at 0 degrees
+     plot shap 1 180          /* plot requested shape at 180 degrees
+     ps                       /* creates flxpso.stack2d image of current plot
+     end
+symb #msg 1
+Type 't' or 'term' to continue
+term                          /* return to terminal wait for user
+grph
+     nvew 2 
+     mirr x
+     disp 0.25                /* scale to appropriate viewing size
+     ttl 1
+Displacement Shapes at $ifrqshp2 kHz
+     plot shap 2 0            /* plot requested shape at 0 degrees
+     plot shap 2 180          /* plot requested shape at 180 degrees
+     ps                       /* adds to flxpso.stack2d
+     end
+symb #msg 1
+Type 't' or 'term' to continue
+term    
+grph
+     nvew 2 
+     mirr x
+     disp 1.0                /* scale to appropriate viewing size
+     ttl 1
+Displacement Shapes at $ifrqshp3 kHz
+     plot shap 3 0            /* plot requested shape at 0 degrees
+     plot shap 3 180          /* plot requested shape at 180 degrees
+     ps                       /* adds to flxpso.stack2d 
+     end
+symb #msg 1
+Type 't' or 'term' to end job
+term    
+stop
+
+
+
